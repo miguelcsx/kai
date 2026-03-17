@@ -1,0 +1,11 @@
+.gradle/
+build/
+**/build/
+.kai/
+.kai*/
+.direnv/
+result
+*.iml
+*.log
+*.tmp
+*.swp
