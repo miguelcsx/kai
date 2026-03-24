@@ -1,0 +1,35 @@
+[campaign]
+id = "demo-campaign"
+
+[campaign.budget]
+max_iterations = 4
+max_findings = 4
+
+[campaign.strategy]
+ids = ["random-generator", "ast-mutator"]
+
+[campaign.executor]
+id = "cli-executor"
+
+[campaign.oracles]
+ids = ["crash-ice", "k1k2-differential"]
+
+[campaign.reducers]
+ids = ["delta-debugger"]
+
+[campaign.profiles]
+ids = ["default", "strict"]
+
+[campaign.profile.default]
+binary = "kotlinc"
+flags = []
+
+[campaign.profile.strict]
+binary = "kotlinc"
+flags = ["-Werror"]
+
+[campaign.seeds]
+corpus_ids = []
+
+[campaign.execution]
+timeout_ms = 30000
