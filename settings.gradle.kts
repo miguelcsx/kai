@@ -1,3 +1,10 @@
+pluginManagement {
+    repositories {
+        gradlePluginPortal()
+        mavenCentral()
+    }
+}
+
 rootProject.name = "kai"
 
 include(
@@ -15,5 +22,4 @@ include(
     "plugins:reducer:kai-reducer-delta",
     "plugins:scheduler:kai-scheduler-roundrobin",
     "app:kai-cli",
-    "test-support:kai-test-fixtures",
 )

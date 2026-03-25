@@ -5,7 +5,6 @@ import org.jetbrains.kotlin.gradle.dsl.KotlinJvmProjectExtension
 
 plugins {
     kotlin("jvm") version "1.9.24" apply false
-    application apply false
 }
 
 val kotlinVersion = "1.9.24"
@@ -87,7 +86,6 @@ listOf(
     ":plugins:oracle:kai-oracle-differential",
     ":plugins:reducer:kai-reducer-delta",
     ":plugins:scheduler:kai-scheduler-roundrobin",
-    ":test-support:kai-test-fixtures",
 ).forEach { path ->
     project(path) {
         dependencies {
