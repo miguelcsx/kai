@@ -10,4 +10,5 @@ sealed class CampaignEvent {
     data class FindingStored(val finding: Finding) : CampaignEvent()
     data class StateSaved(val state: CampaignState) : CampaignEvent()
     data class Finished(val state: CampaignState) : CampaignEvent()
+    data class Failed(val state: CampaignState, val message: String) : CampaignEvent()
 }

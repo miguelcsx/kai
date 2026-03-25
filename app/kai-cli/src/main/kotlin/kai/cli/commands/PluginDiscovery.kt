@@ -16,11 +16,11 @@ internal object PluginDiscovery {
     fun load(pluginDir: String?): PluginRegistry {
         val loader = classLoader(pluginDir)
         return PluginRegistry().also { registry ->
-            loadStrategies(loader).forEach(registry::registerStrategy)
-            loadExecutors(loader).forEach(registry::registerExecutor)
-            loadOracles(loader).forEach(registry::registerOracle)
-            loadReducers(loader).forEach(registry::registerReducer)
-            loadSchedulers(loader).forEach(registry::registerScheduler)
+            services<StrategyPlugin>(loader).forEach(registry::registerStrategy)
+            services<ExecutorPlugin>(loader).forEach(registry::registerExecutor)
+            services<OraclePlugin>(loader).forEach(registry::registerOracle)
+            services<ReducerPlugin>(loader).forEach(registry::registerReducer)
+            services<SchedulerPlugin>(loader).forEach(registry::registerScheduler)
         }
     }
 
@@ -53,23 +53,7 @@ internal object PluginDiscovery {
         }
     }
 
-    private fun loadStrategies(loader: ClassLoader): List<StrategyPlugin> {
-        return ServiceLoader.load(StrategyPlugin::class.java, loader).toList()
-    }
-
-    private fun loadExecutors(loader: ClassLoader): List<ExecutorPlugin> {
-        return ServiceLoader.load(ExecutorPlugin::class.java, loader).toList()
-    }
-
-    private fun loadOracles(loader: ClassLoader): List<OraclePlugin> {
-        return ServiceLoader.load(OraclePlugin::class.java, loader).toList()
-    }
-
-    private fun loadReducers(loader: ClassLoader): List<ReducerPlugin> {
-        return ServiceLoader.load(ReducerPlugin::class.java, loader).toList()
-    }
-
-    private fun loadSchedulers(loader: ClassLoader): List<SchedulerPlugin> {
-        return ServiceLoader.load(SchedulerPlugin::class.java, loader).toList()
+    private inline fun <reified T : Any> services(loader: ClassLoader): List<T> {
+        return ServiceLoader.load(T::class.java, loader).toList()
     }
 }

@@ -3,21 +3,22 @@ package kai.cli.app
 import kai.domain.finding.Finding
 import kai.domain.id.FindingId
 import kai.domain.observations.ExecutionResult
+import kai.domain.result.KaiResult
+import kai.domain.result.kaiResult
 
 class FindingService(
     private val runtime: KaiRuntime
 ) {
-    fun replay(findingId: String): FindingReplay {
+    fun replay(findingId: String): KaiResult<FindingReplay> = kaiResult {
         val finding = loadFinding(findingId)
         val campaign = loadCampaign(finding)
         val executor = runtime.registry.resolveExecutor(campaign.config.executorId.value)
         val target = finding.reduced ?: finding.pending.testCase
-        val results = executor.execute(target, campaign.config.executionConfig)
-        return FindingReplay(finding, results)
+        FindingReplay(finding, executor.execute(target, campaign.config.executionConfig))
     }
 
-    fun regress(): List<FindingReplay> {
-        return runtime.storage.listFindings().getOrThrow().map { finding ->
+    fun regress(): KaiResult<List<FindingReplay>> = kaiResult {
+        runtime.storage.listFindings().getOrThrow().map { finding ->
             val campaign = loadCampaign(finding)
             val executor = runtime.registry.resolveExecutor(campaign.config.executorId.value)
             val target = finding.reduced ?: finding.pending.testCase

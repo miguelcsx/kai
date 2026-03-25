@@ -23,22 +23,23 @@ class PluginRegistry(
     private var scheduler: SchedulerPlugin? = null
 
     fun registerStrategy(plugin: StrategyPlugin) {
-        strategies[plugin.id.value] = plugin
+        register(strategies, plugin.id.value, plugin, "strategy")
     }
 
     fun registerExecutor(plugin: ExecutorPlugin) {
-        executors[plugin.id.value] = plugin
+        register(executors, plugin.id.value, plugin, "executor")
     }
 
     fun registerOracle(plugin: OraclePlugin) {
-        oracles[plugin.id.value] = plugin
+        register(oracles, plugin.id.value, plugin, "oracle")
     }
 
     fun registerReducer(plugin: ReducerPlugin) {
-        reducers[plugin.id.value] = plugin
+        register(reducers, plugin.id.value, plugin, "reducer")
     }
 
     fun registerScheduler(plugin: SchedulerPlugin) {
+        require(scheduler == null) { "Duplicate scheduler plugin registration" }
         scheduler = plugin
     }
 
@@ -64,6 +65,12 @@ class PluginRegistry(
 
     fun validateConfig(config: CampaignConfig): ValidationResult {
         val errors = mutableListOf<String>()
+        if (config.strategyIds.isEmpty()) {
+            errors += "At least one strategy plugin is required"
+        }
+        if (config.oracleIds.isEmpty()) {
+            errors += "At least one oracle plugin is required"
+        }
         validateStrategies(config, errors)
         validateExecutor(config, errors)
         validateOracles(config, errors)
@@ -137,5 +144,15 @@ class PluginRegistry(
         if (!actual.isCompatibleWith(expectedVersion)) {
             errors += "Incompatible $type plugin version for $id: expected $expectedVersion, got $actual"
         }
+    }
+
+    private fun <T> register(
+        plugins: MutableMap<String, T>,
+        id: String,
+        plugin: T,
+        type: String
+    ) {
+        require(id !in plugins) { "Duplicate $type plugin registration: $id" }
+        plugins[id] = plugin
     }
 }
