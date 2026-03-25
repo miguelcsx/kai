@@ -22,7 +22,7 @@ class TomlCampaignConfigParserTest {
                 assertEquals(4, result.value.budget.maxFindings)
                 assertEquals(8, result.value.budget.maxReductionIterations)
                 assertEquals(listOf("random-generator", "ast-mutator"), result.value.strategyIds.map { it.value })
-                assertEquals(listOf("default", "strict"), result.value.compilerProfiles.map { it.name })
+                assertEquals(listOf("default", "strict"), result.value.buildConfig.compilerProfiles.map { it.name })
             }
             is KaiResult.Failure -> error("Expected demo config to parse, but failed: ${result.message}")
         }
