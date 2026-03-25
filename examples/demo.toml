@@ -4,6 +4,7 @@ id = "demo-campaign"
 [campaign.budget]
 max_iterations = 4
 max_findings = 4
+max_reduction_iterations = 8
 
 [campaign.strategy]
 ids = ["random-generator", "ast-mutator"]
