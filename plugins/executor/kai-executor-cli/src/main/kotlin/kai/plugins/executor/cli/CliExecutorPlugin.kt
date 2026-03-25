@@ -1,13 +1,19 @@
 package kai.plugins.executor.cli
 
+import java.io.InputStream
 import java.nio.file.Files
+import java.nio.file.Path
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
 import kai.domain.execution.ExecutionConfig
 import kai.domain.execution.ExecutorCapabilities
 import kai.domain.execution.ExecutorProbeResult
 import kai.domain.id.ExecutorId
 import kai.domain.id.InterfaceVersion
+import kai.domain.observations.ArtifactKind
+import kai.domain.observations.CompilationArtifact
 import kai.domain.observations.CompilerDiagnostic
+import kai.domain.observations.DiagnosticSeverity
 import kai.domain.observations.ExecutionResult
 import kai.domain.testcase.TestCase
 import kai.plugin.executor.ExecutorPlugin
@@ -44,41 +50,54 @@ class CliExecutorPlugin : ExecutorPlugin {
     ): ExecutionResult {
         val workDir = Files.createTempDirectory("kai-exec-")
         return try {
-            val source = writeSources(workDir, testCase)
+            val sources = writeSources(workDir, testCase)
             val outputDir = Files.createDirectory(workDir.resolve("out"))
-            val command = mutableListOf(binary)
-            command += flags
-            command += listOf(source.toString(), "-d", outputDir.toString())
-            val startedAt = System.nanoTime()
+            val command = buildList {
+                add(binary)
+                addAll(flags)
+                addAll(sources.map(Path::toString))
+                add("-d")
+                add(outputDir.toString())
+            }
             val process = ProcessBuilder(command)
                 .directory(workDir.toFile())
+                .apply { environment().putAll(config.environment) }
                 .start()
+            val stdout = readAsync(process.inputStream)
+            val stderr = readAsync(process.errorStream)
+            val startedAt = System.nanoTime()
             val completed = process.waitFor(config.timeoutMillis, TimeUnit.MILLISECONDS)
             val durationMs = (System.nanoTime() - startedAt) / 1_000_000L
             if (!completed) {
                 process.destroyForcibly()
+                stdout.cancel(true)
+                stderr.cancel(true)
                 return timeoutResult(profileName, command, durationMs)
             }
-            val stdout = process.inputStream.bufferedReader().readText()
-            val stderr = process.errorStream.bufferedReader().readText()
+            val stdoutText = stdout.join()
+            val stderrText = stderr.join()
             ExecutionResult.create(
                 profileName = profileName,
                 command = command,
                 exitCode = process.exitValue(),
-                stdout = stdout,
-                stderr = stderr,
+                stdout = stdoutText,
+                stderr = stderrText,
                 durationMs = durationMs,
-                diagnostics = diagnostics(stderr)
+                diagnostics = diagnostics(stderrText),
+                artifacts = if (config.captureArtifacts) artifacts(outputDir) else emptyList()
             )
         } finally {
             workDir.toFile().deleteRecursively()
         }
     }
 
-    private fun writeSources(workDir: java.nio.file.Path, testCase: TestCase): java.nio.file.Path {
-        val source = workDir.resolve(testCase.sources.first().relativePath)
-        Files.write(source, testCase.sources.first().content.toByteArray())
-        return source
+    private fun writeSources(workDir: Path, testCase: TestCase): List<Path> {
+        return testCase.sources.map { source ->
+            workDir.resolve(source.relativePath).also { path ->
+                path.parent?.let(Files::createDirectories)
+                Files.writeString(path, source.content)
+            }
+        }
     }
 
     private fun timeoutResult(
@@ -93,16 +112,45 @@ class CliExecutorPlugin : ExecutorPlugin {
             stdout = "",
             stderr = "timeout",
             durationMs = durationMs,
-            diagnostics = listOf(CompilerDiagnostic("ERROR", "timeout", null))
+            diagnostics = listOf(CompilerDiagnostic(DiagnosticSeverity.ERROR, "timeout", null))
         )
     }
 
     private fun diagnostics(stderr: String): List<CompilerDiagnostic> {
         return stderr.lines()
             .filter { it.contains("error", ignoreCase = true) || it.contains("warning", ignoreCase = true) }
-            .map {
-                val severity = if (it.contains("warning", ignoreCase = true)) "WARNING" else "ERROR"
-                CompilerDiagnostic(severity, it.trim(), null)
+            .map { line ->
+                val severity = if (line.contains("warning", ignoreCase = true)) "WARNING" else "ERROR"
+                CompilerDiagnostic(DiagnosticSeverity.valueOf(severity), line.trim(), null)
             }
+    }
+
+    private fun artifacts(outputDir: Path): List<CompilationArtifact> {
+        return Files.walk(outputDir).use { paths ->
+            paths.filter(Files::isRegularFile)
+                .map { path ->
+                    CompilationArtifact(
+                        kind = artifactKind(path),
+                        path = outputDir.relativize(path).toString(),
+                        sizeBytes = Files.size(path)
+                    )
+                }
+                .toList()
+        }
+    }
+
+    private fun artifactKind(path: Path): ArtifactKind {
+        return when (path.fileName.toString().substringAfterLast('.', "")) {
+            "class" -> ArtifactKind.CLASSFILE
+            "js" -> ArtifactKind.JS
+            "klib", "so", "dylib", "dll", "exe" -> ArtifactKind.NATIVE_BINARY
+            else -> ArtifactKind.IR
+        }
+    }
+
+    private fun readAsync(stream: InputStream): CompletableFuture<String> {
+        return CompletableFuture.supplyAsync {
+            stream.bufferedReader().use { it.readText() }
+        }
     }
 }

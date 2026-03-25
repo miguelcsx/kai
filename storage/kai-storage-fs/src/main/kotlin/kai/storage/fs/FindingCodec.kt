@@ -9,7 +9,10 @@ import kai.domain.finding.PendingFinding
 import kai.domain.id.FindingId
 import kai.domain.id.OracleId
 import kai.domain.id.TestCaseId
+import kai.domain.observations.ArtifactKind
+import kai.domain.observations.CompilationArtifact
 import kai.domain.observations.CompilerDiagnostic
+import kai.domain.observations.DiagnosticSeverity
 import kai.domain.observations.ExecutionResult
 import kai.domain.observations.Observations
 
@@ -117,9 +120,18 @@ object FindingCodec {
                 "diagnostics" to JsonValue.Arr(result.diagnostics.map { diagnostic ->
                     JsonValue.Obj(
                         linkedMapOf(
-                            "severity" to JsonValue.Str(diagnostic.severity),
+                            "severity" to JsonValue.Str(diagnostic.severity.name),
                             "message" to JsonValue.Str(diagnostic.message),
                             "location" to optionalString(diagnostic.location)
+                        )
+                    )
+                }),
+                "artifacts" to JsonValue.Arr(result.artifacts.map { artifact ->
+                    JsonValue.Obj(
+                        linkedMapOf(
+                            "kind" to JsonValue.Str(artifact.kind.name),
+                            "path" to JsonValue.Str(artifact.path),
+                            "sizeBytes" to JsonValue.Num(artifact.sizeBytes)
                         )
                     )
                 })
@@ -139,11 +151,19 @@ object FindingCodec {
             diagnostics = node.values.getValue("diagnostics").asArray().map { diagnostic ->
                 val item = diagnostic.asObject()
                 CompilerDiagnostic(
-                    severity = item.values.getValue("severity").asString(),
+                    severity = DiagnosticSeverity.valueOf(item.values.getValue("severity").asString()),
                     message = item.values.getValue("message").asString(),
                     location = optionalString(item.values["location"])
                 )
-            }
+            },
+            artifacts = node.values["artifacts"]?.asArray()?.map { artifact ->
+                val item = artifact.asObject()
+                CompilationArtifact(
+                    kind = ArtifactKind.valueOf(item.values.getValue("kind").asString()),
+                    path = item.values.getValue("path").asString(),
+                    sizeBytes = item.values.getValue("sizeBytes").asLong()
+                )
+            } ?: emptyList()
         )
     }
 

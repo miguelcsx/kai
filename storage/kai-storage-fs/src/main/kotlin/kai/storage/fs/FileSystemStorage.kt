@@ -3,6 +3,7 @@ package kai.storage.fs
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
+import java.nio.charset.StandardCharsets
 import kai.domain.campaign.CampaignState
 import kai.domain.finding.Finding
 import kai.domain.id.CampaignId
@@ -10,7 +11,9 @@ import kai.domain.id.FindingId
 import kai.domain.id.TestCaseId
 import kai.domain.testcase.TestCase
 import kai.storage.api.CampaignStore
+import kai.storage.api.CorpusQuery
 import kai.storage.api.CorpusStore
+import kai.storage.api.FindingQuery
 import kai.storage.api.FindingsStore
 import kai.storage.api.StoragePorts
 
@@ -36,6 +39,13 @@ class FileSystemStorage(root: Path) : CorpusStore, FindingsStore, CampaignStore 
         listEntries(corpusDir, "testcase.json").map { readJson(it, TestCaseCodec::decode) }
     }
 
+    override fun findTestCases(query: CorpusQuery): Result<List<TestCase>> = runCatching {
+        listTestCases().getOrThrow().filter { testCase ->
+            (query.strategyId == null || testCase.provenance.strategyId == query.strategyId) &&
+                (query.parentId == null || testCase.provenance.parentId == query.parentId)
+        }
+    }
+
     override fun saveFinding(finding: Finding): Result<FindingId> = runCatching {
         val findingDir = ensureDirectory(findingsDir.resolve(finding.id.value))
         writeJson(findingDir.resolve("meta.json"), FindingCodec.encode(finding))
@@ -54,6 +64,14 @@ class FileSystemStorage(root: Path) : CorpusStore, FindingsStore, CampaignStore 
 
     override fun listFindings(): Result<List<Finding>> = runCatching {
         listEntries(findingsDir, "meta.json").map { readJson(it, FindingCodec::decode) }
+    }
+
+    override fun findFindings(query: FindingQuery): Result<List<Finding>> = runCatching {
+        listFindings().getOrThrow().filter { finding ->
+            (query.status == null || finding.status == query.status) &&
+                (query.oracleId == null || finding.pending.oracleId == query.oracleId) &&
+                (query.kind == null || finding.pending.kind == query.kind)
+        }
     }
 
     override fun saveCampaign(state: CampaignState): Result<CampaignId> = runCatching {
@@ -77,18 +95,25 @@ class FileSystemStorage(root: Path) : CorpusStore, FindingsStore, CampaignStore 
 
     private fun writeReplayScript(path: Path, finding: Finding) {
         val testCase = finding.reduced ?: finding.pending.testCase
+        val sourceRoot = if (finding.reduced == null) "testcase" else "reduced"
         val profile = testCase.buildConfig.compilerProfiles.first()
-        val command = mutableListOf(profile.binary)
-        command += profile.flags
-        command += listOf("\$ROOT/testcase/src/${testCase.sources.first().relativePath}")
+        val command = buildList {
+            add(profile.binary)
+            addAll(profile.flags)
+            addAll(testCase.sources.map { "\$ROOT/$sourceRoot/src/${it.relativePath}" })
+            add("-d")
+            add("\$ROOT/out")
+        }
         val content = buildString {
             append("#!/usr/bin/env bash\n")
             append("set -euo pipefail\n")
             append("ROOT=\"$(cd \"$(dirname \"\${BASH_SOURCE[0]}\")\" && pwd)\"\n")
-            append(command.joinToString(" "))
+            append("mkdir -p \"\$ROOT/out\"\n")
+            append(command.joinToString(" ") { shell(it) })
             append('\n')
         }
         writeText(path, content)
+        path.toFile().setExecutable(true)
     }
 
     private fun writeJson(path: Path, value: JsonValue) {
@@ -98,7 +123,7 @@ class FileSystemStorage(root: Path) : CorpusStore, FindingsStore, CampaignStore 
     private fun writeText(path: Path, content: String) {
         ensureDirectory(path.parent)
         val temp = path.resolveSibling(path.fileName.toString() + ".tmp")
-        Files.write(temp, content.toByteArray())
+        Files.writeString(temp, content, StandardCharsets.UTF_8)
         Files.move(temp, path, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
     }
 
@@ -110,7 +135,7 @@ class FileSystemStorage(root: Path) : CorpusStore, FindingsStore, CampaignStore 
     }
 
     private fun <T> readJson(path: Path, decode: (JsonValue) -> T): T {
-        val content = String(Files.readAllBytes(path))
+        val content = Files.readString(path, StandardCharsets.UTF_8)
         return decode(JsonParser(content).parse())
     }
 
@@ -134,5 +159,9 @@ class FileSystemStorage(root: Path) : CorpusStore, FindingsStore, CampaignStore 
 
     private fun ensureDirectory(path: Path): Path {
         return Files.createDirectories(path)
+    }
+
+    private fun shell(value: String): String {
+        return "'${value.replace("'", "'\"'\"'")}'"
     }
 }

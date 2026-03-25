@@ -8,22 +8,21 @@ import kai.domain.observations.Observations
 import kai.plugin.registry.PluginRegistry
 
 interface FindingVerifier {
-    fun reproduces(candidate: TestCase, original: PendingFinding): Boolean
+    fun reproduces(config: CampaignConfig, candidate: TestCase, original: PendingFinding): Boolean
 }
 
 class OracleFindingVerifier(
-    private val config: CampaignConfig,
     private val registry: PluginRegistry
 ) : FindingVerifier {
-    override fun reproduces(candidate: TestCase, original: PendingFinding): Boolean {
+    override fun reproduces(config: CampaignConfig, candidate: TestCase, original: PendingFinding): Boolean {
         return runCatching {
-            val observations = execute(candidate)
+            val observations = execute(config, candidate)
             val oracle = registry.resolveOracle(original.oracleId.value)
             sameFinding(original, oracle.check(observations, candidate))
         }.getOrDefault(false)
     }
 
-    private fun execute(candidate: TestCase): Observations {
+    private fun execute(config: CampaignConfig, candidate: TestCase): Observations {
         val executor = registry.resolveExecutor(config.executorId.value)
         val results = executor.execute(candidate, config.executionConfig)
         return Observations.create(candidate.id, results)

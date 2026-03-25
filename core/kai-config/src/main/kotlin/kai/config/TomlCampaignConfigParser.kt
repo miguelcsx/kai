@@ -9,14 +9,19 @@ import kai.domain.id.ExecutorId
 import kai.domain.id.OracleId
 import kai.domain.id.ReducerId
 import kai.domain.id.StrategyId
+import kai.domain.result.KaiResult
+import kai.domain.result.kaiResult
+import kai.domain.testcase.ApiVersion
+import kai.domain.testcase.CompilationTarget
 import kai.domain.testcase.CompilerProfile
+import kai.domain.testcase.LanguageVersion
 import org.tomlj.Toml
 import org.tomlj.TomlArray
 import org.tomlj.TomlParseResult
 import org.tomlj.TomlTable
 
 class TomlCampaignConfigParser {
-    fun parse(path: Path): CampaignConfig {
+    fun parse(path: Path): KaiResult<CampaignConfig> = kaiResult {
         val result = Toml.parse(path)
         validate(result)
 
@@ -29,7 +34,7 @@ class TomlCampaignConfigParser {
         val seeds = table(result, "campaign.seeds")
         val execution = table(result, "campaign.execution")
 
-        return CampaignConfig(
+        CampaignConfig(
             id = CampaignId(string(campaign, "id")),
             strategyIds = strings(strategy, "ids").map(::StrategyId),
             executorId = ExecutorId(string(executor, "id")),
@@ -38,7 +43,8 @@ class TomlCampaignConfigParser {
             compilerProfiles = profiles(result),
             budget = CampaignBudget.create(
                 maxIterations = long(budget, "max_iterations").toInt(),
-                maxFindings = long(budget, "max_findings").toInt()
+                maxFindings = long(budget, "max_findings").toInt(),
+                maxReductionIterations = long(budget, "max_reduction_iterations").toInt()
             ),
             seedCorpusIds = strings(seeds, "corpus_ids"),
             executionConfig = ExecutionConfig.create(
@@ -66,6 +72,15 @@ class TomlCampaignConfigParser {
         }
     }
 
+    fun buildConfig(table: TomlTable, profiles: List<CompilerProfile>): kai.domain.testcase.BuildConfig {
+        return kai.domain.testcase.BuildConfig.create(
+            compilerProfiles = profiles,
+            target = enum(table, "target", CompilationTarget.JVM),
+            languageVersion = value(table, "language_version", LanguageVersion.DEFAULT, ::LanguageVersion),
+            apiVersion = value(table, "api_version", ApiVersion.DEFAULT, ::ApiVersion)
+        )
+    }
+
     private fun table(result: TomlParseResult, key: String): TomlTable {
         return requireNotNull(result.getTable(key)) { "Missing TOML table: $key" }
     }
@@ -81,6 +96,15 @@ class TomlCampaignConfigParser {
     private fun strings(table: TomlTable, key: String): List<String> {
         val array = requireNotNull(table.getArray(key)) { "Missing TOML array: $key" }
         return stringValues(array, key)
+    }
+
+    private inline fun <reified T : Enum<T>> enum(table: TomlTable, key: String, fallback: T): T {
+        val value = table.getString(key) ?: return fallback
+        return enumValueOf(value.uppercase())
+    }
+
+    private fun <T> value(table: TomlTable, key: String, fallback: T, create: (String) -> T): T {
+        return table.getString(key)?.let(create) ?: fallback
     }
 
     private fun stringValues(array: TomlArray, key: String): List<String> {

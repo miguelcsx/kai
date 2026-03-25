@@ -3,13 +3,13 @@ package kai.domain.observations
 import kai.domain.id.TestCaseId
 
 data class CompilerDiagnostic(
-    val severity: String,
+    val severity: DiagnosticSeverity,
     val message: String,
     val location: String?
 )
 
 data class CompilationArtifact(
-    val kind: String,
+    val kind: ArtifactKind,
     val path: String,
     val sizeBytes: Long
 )

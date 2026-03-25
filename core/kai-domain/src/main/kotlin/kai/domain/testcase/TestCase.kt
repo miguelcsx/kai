@@ -37,16 +37,16 @@ data class CompilerProfile(
 
 data class BuildConfig(
     val compilerProfiles: List<CompilerProfile>,
-    val target: String,
-    val languageVersion: String,
-    val apiVersion: String
+    val target: CompilationTarget,
+    val languageVersion: LanguageVersion,
+    val apiVersion: ApiVersion
 ) {
     companion object {
         fun create(
             compilerProfiles: List<CompilerProfile>,
-            target: String = "JVM",
-            languageVersion: String = "default",
-            apiVersion: String = "default"
+            target: CompilationTarget = CompilationTarget.JVM,
+            languageVersion: LanguageVersion = LanguageVersion.DEFAULT,
+            apiVersion: ApiVersion = ApiVersion.DEFAULT
         ): BuildConfig {
             require(compilerProfiles.isNotEmpty()) { "compilerProfiles must not be empty" }
             return BuildConfig(
@@ -74,7 +74,7 @@ data class TestCase(
     val provenance: Provenance
 ) {
     val charCount: Int
-        get() = sources.sumBy { it.content.length }
+        get() = sources.sumOf { it.content.length }
 
     companion object {
         fun create(

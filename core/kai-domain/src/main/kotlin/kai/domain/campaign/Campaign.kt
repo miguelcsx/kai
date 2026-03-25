@@ -10,13 +10,19 @@ import kai.domain.testcase.CompilerProfile
 
 data class CampaignBudget(
     val maxIterations: Int,
-    val maxFindings: Int
+    val maxFindings: Int,
+    val maxReductionIterations: Int
 ) {
     companion object {
-        fun create(maxIterations: Int, maxFindings: Int = 10): CampaignBudget {
+        fun create(
+            maxIterations: Int,
+            maxFindings: Int,
+            maxReductionIterations: Int
+        ): CampaignBudget {
             require(maxIterations > 0) { "maxIterations must be positive" }
             require(maxFindings > 0) { "maxFindings must be positive" }
-            return CampaignBudget(maxIterations, maxFindings)
+            require(maxReductionIterations > 0) { "maxReductionIterations must be positive" }
+            return CampaignBudget(maxIterations, maxFindings, maxReductionIterations)
         }
     }
 }

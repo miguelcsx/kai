@@ -37,7 +37,7 @@ class CrashOraclePlugin : OraclePlugin {
     }
 
     private fun containsIceMarker(stderr: String): Boolean {
-        val text = stderr.toLowerCase()
+        val text = stderr.lowercase()
         return listOf(
             "internal error",
             "exception during",

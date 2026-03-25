@@ -5,13 +5,11 @@ import kai.domain.campaign.CampaignState
 import kai.domain.campaign.CampaignStats
 import kai.domain.campaign.CampaignStatus
 import kai.domain.finding.Finding
-import kai.domain.finding.PendingFinding
 import kai.domain.finding.OracleVerdict
 import kai.domain.observations.Observations
+import kai.domain.result.KaiResult
 import kai.domain.testcase.TestCase
 import kai.engine.event.CampaignEvent
-import kai.plugin.reducer.InterestingnessPredicate
-import kai.plugin.reducer.ReductionBudget
 import kai.plugin.registry.PluginRegistry
 import kai.plugin.registry.ValidationResult
 import kai.plugin.strategy.GenerationContext
@@ -19,15 +17,21 @@ import kai.storage.api.StoragePorts
 
 class CampaignEngine(
     private val registry: PluginRegistry,
-    private val storage: StoragePorts
+    private val storage: StoragePorts,
+    private val verifier: FindingVerifier = OracleFindingVerifier(registry),
+    private val reductionService: ReductionService = ReductionService(registry, verifier)
 ) {
     fun run(
         config: CampaignConfig,
         onEvent: (CampaignEvent) -> Unit
-    ): Result<CampaignState> {
-        return runCatching {
-            validate(config)
-            var state = CampaignState.initial(config)
+    ): KaiResult<CampaignState> {
+        val validation = validate(config)
+        if (validation is KaiResult.Failure) {
+            return validation
+        }
+        var state = CampaignState.initial(config)
+        return try {
+            val reduction = reductionService.forConfig(config)
             saveState(state, onEvent)
             onEvent(CampaignEvent.Started(state))
             val signals = linkedMapOf<kai.domain.id.StrategyId, MutableList<kai.plugin.strategy.FitnessSignal>>()
@@ -36,7 +40,7 @@ class CampaignEngine(
                 val testCase = nextTestCase(state, signals)
                 storeTestCase(testCase, onEvent)
                 val observations = execute(state, testCase)
-                val findings = evaluate(state.config, observations, testCase, onEvent)
+                val findings = evaluate(state.config, observations, testCase, reduction, onEvent)
                 updateSignals(observations, testCase, signals)
                 state = advance(state, findings.size)
                 saveState(state, onEvent)
@@ -47,14 +51,19 @@ class CampaignEngine(
             val finished = state.copy(status = CampaignStatus.FINISHED)
             saveState(finished, onEvent)
             onEvent(CampaignEvent.Finished(finished))
-            finished
+            KaiResult.Success(finished)
+        } catch (error: Throwable) {
+            val failed = state.copy(status = CampaignStatus.FAILED)
+            saveState(failed, onEvent)
+            onEvent(CampaignEvent.Failed(failed, error.message ?: error::class.simpleName.orEmpty()))
+            KaiResult.Failure(error.message ?: error::class.simpleName.orEmpty(), error)
         }
     }
 
-    private fun validate(config: CampaignConfig) {
+    private fun validate(config: CampaignConfig): KaiResult<Unit> {
         when (val result = registry.validateConfig(config)) {
-            ValidationResult.Success -> Unit
-            is ValidationResult.Failure -> error(result.errors.joinToString("\n"))
+            ValidationResult.Success -> return KaiResult.Success(Unit)
+            is ValidationResult.Failure -> return KaiResult.Failure(result.errors.joinToString("\n"))
         }
     }
 
@@ -69,7 +78,7 @@ class CampaignEngine(
         val scheduler = registry.resolveScheduler()
         val strategyId = scheduler.next(state.config.strategyIds, signals, state.stats)
         val strategy = registry.resolveStrategy(strategyId.value)
-        val corpus = storage.corpus.listTestCases().getOrThrow()
+        val corpus = corpusSample(state.config)
         val context = GenerationContext(
             campaignId = state.id,
             seed = state.stats.totalGenerated.toLong() + 1L,
@@ -101,6 +110,7 @@ class CampaignEngine(
         config: CampaignConfig,
         observations: Observations,
         testCase: TestCase,
+        reduction: ConfiguredReductionService,
         onEvent: (CampaignEvent) -> Unit
     ): List<Finding> {
         val findings = mutableListOf<Finding>()
@@ -108,7 +118,7 @@ class CampaignEngine(
             val oracle = registry.resolveOracle(oracleId.value)
             val verdict = oracle.check(observations, testCase)
             if (verdict is OracleVerdict.Interesting) {
-                val finding = reduceIfPossible(config, verdict.finding.testCase, verdict)
+                val finding = reduction.reduce(verdict)
                 if (isNewFinding(finding)) {
                     storage.findings.saveFinding(finding).getOrThrow()
                     onEvent(CampaignEvent.FindingStored(finding))
@@ -119,55 +129,16 @@ class CampaignEngine(
         return findings
     }
 
-    private fun reduceIfPossible(
-        config: CampaignConfig,
-        testCase: TestCase,
-        verdict: OracleVerdict.Interesting
-    ): Finding {
-        val reducerId = config.reducerIds.firstOrNull() ?: return Finding.create(verdict.finding)
-        val reducer = registry.resolveReducer(reducerId.value)
-        val predicate = reductionPredicate(config, verdict.finding)
-        val reduced = reducer.reduce(testCase, predicate, ReductionBudget(16)).reduced
-        val accepted = if (predicate.isSatisfied(reduced)) reduced else null
-        return Finding.create(verdict.finding, accepted)
-    }
-
-    private fun reductionPredicate(
-        config: CampaignConfig,
-        original: PendingFinding
-    ): InterestingnessPredicate {
-        val executor = registry.resolveExecutor(config.executorId.value)
-        val oracle = registry.resolveOracle(original.oracleId.value)
-        return object : InterestingnessPredicate {
-            override fun isSatisfied(candidate: TestCase): Boolean {
-                return runCatching {
-                    if (candidate.charCount >= original.testCase.charCount) {
-                        return@runCatching false
-                    }
-                    val observations = Observations.create(
-                        candidate.id,
-                        executor.execute(candidate, config.executionConfig)
-                    )
-                    val verdict = oracle.check(observations, candidate)
-                    sameFinding(original, verdict)
-                }.getOrDefault(false)
-            }
-        }
-    }
-
-    private fun sameFinding(
-        original: PendingFinding,
-        verdict: OracleVerdict
-    ): Boolean {
-        if (verdict !is OracleVerdict.Interesting) {
-            return false
-        }
-        return verdict.finding.kind == original.kind &&
-            verdict.finding.signature.hash == original.signature.hash
-    }
-
     private fun isNewFinding(finding: Finding): Boolean {
         return storage.findings.loadFinding(finding.id).getOrThrow() == null
+    }
+
+    private fun corpusSample(config: CampaignConfig): List<TestCase> {
+        val seeded = config.seedCorpusIds.mapNotNull { id ->
+            storage.corpus.loadTestCase(kai.domain.id.TestCaseId(id)).getOrThrow()
+        }
+        val corpus = if (seeded.isEmpty()) storage.corpus.listTestCases().getOrThrow() else seeded
+        return corpus.take(8)
     }
 
     private fun updateSignals(

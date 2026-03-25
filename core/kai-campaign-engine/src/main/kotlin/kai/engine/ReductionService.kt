@@ -8,17 +8,26 @@ import kai.plugin.reducer.ReductionBudget
 import kai.plugin.registry.PluginRegistry
 
 class ReductionService(
+    private val registry: PluginRegistry,
+    private val verifier: FindingVerifier
+) {
+    fun forConfig(config: CampaignConfig): ConfiguredReductionService {
+        return ConfiguredReductionService(config, registry, verifier)
+    }
+}
+
+class ConfiguredReductionService(
     private val config: CampaignConfig,
     private val registry: PluginRegistry,
     private val verifier: FindingVerifier
 ) {
     fun reduce(verdict: OracleVerdict.Interesting): Finding {
         val reducerId = config.reducerIds.firstOrNull() ?: return Finding.create(verdict.finding)
-        val reducer = registry.resolveReducer(reducerId.value)
         val predicate = predicate(verdict.finding)
-        val reduced = reducer.reduce(verdict.finding.testCase, predicate, ReductionBudget(16)).reduced
-        val accepted = if (predicate.isSatisfied(reduced)) reduced else null
-        return Finding.create(verdict.finding, accepted)
+        val reduced = registry.resolveReducer(reducerId.value)
+            .reduce(verdict.finding.testCase, predicate, ReductionBudget(config.budget.maxReductionIterations))
+            .reduced
+        return Finding.create(verdict.finding, reduced.takeIf(predicate::isSatisfied))
     }
 
     private fun predicate(original: kai.domain.finding.PendingFinding): InterestingnessPredicate {
@@ -27,7 +36,7 @@ class ReductionService(
                 if (candidate.charCount >= original.testCase.charCount) {
                     return false
                 }
-                return verifier.reproduces(candidate, original)
+                return verifier.reproduces(config, candidate, original)
             }
         }
     }

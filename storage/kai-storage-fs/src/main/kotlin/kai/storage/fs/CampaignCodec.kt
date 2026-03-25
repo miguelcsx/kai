@@ -11,7 +11,10 @@ import kai.domain.id.ExecutorId
 import kai.domain.id.OracleId
 import kai.domain.id.ReducerId
 import kai.domain.id.StrategyId
+import kai.domain.testcase.ApiVersion
+import kai.domain.testcase.CompilationTarget
 import kai.domain.testcase.CompilerProfile
+import kai.domain.testcase.LanguageVersion
 
 object CampaignCodec {
     fun encode(state: CampaignState): JsonValue {
@@ -59,7 +62,8 @@ object CampaignCodec {
                 "budget" to JsonValue.Obj(
                     linkedMapOf(
                         "maxIterations" to JsonValue.Num(config.budget.maxIterations.toLong()),
-                        "maxFindings" to JsonValue.Num(config.budget.maxFindings.toLong())
+                        "maxFindings" to JsonValue.Num(config.budget.maxFindings.toLong()),
+                        "maxReductionIterations" to JsonValue.Num(config.budget.maxReductionIterations.toLong())
                     )
                 ),
                 "execution" to JsonValue.Obj(
@@ -83,7 +87,8 @@ object CampaignCodec {
             compilerProfiles = value.array("compilerProfiles").map { decodeProfile(it) },
             budget = CampaignBudget.create(
                 maxIterations = budget.values.getValue("maxIterations").asLong().toInt(),
-                maxFindings = budget.values.getValue("maxFindings").asLong().toInt()
+                maxFindings = budget.values.getValue("maxFindings").asLong().toInt(),
+                maxReductionIterations = budget.values.getValue("maxReductionIterations").asLong().toInt()
             ),
             seedCorpusIds = value.array("seedCorpusIds").map { it.asString() },
             executionConfig = ExecutionConfig.create(execution.values.getValue("timeoutMillis").asLong())
