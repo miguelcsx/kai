@@ -91,16 +91,20 @@ Kai stores artifacts under a configurable directory:
 
 ## Running Kai
 
+The repository ships a Nix development environment with the expected JDK, Gradle, and Kotlin CLI.
+
 Build the project:
 
 ```bash
-./gradlew build
+nix develop --command gradle build
 ```
 
-Run a campaign:
+Install and run the demo campaign:
 
 ```bash
-./app/kai-cli/build/install/kai-cli/bin/kai-cli run examples/demo.toml
+nix develop --command bash -lc 'gradle :app:kai-cli:installDist && app/kai-cli/build/install/kai-cli/bin/kai-cli run examples/demo.toml'
 ```
+
+The demo configuration is intentionally small and exercises the default random generator, text-based mutation strategy, CLI executor, crash oracle, differential oracle, replayable findings storage, and delta reducer.
 
 The CLI supports additional commands for replaying specific findings and running regression tests against a stored corpus.
