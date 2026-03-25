@@ -3,8 +3,9 @@ package kai.engine
 import kai.domain.campaign.CampaignConfig
 import kai.domain.finding.OracleVerdict
 import kai.domain.finding.PendingFinding
-import kai.domain.testcase.TestCase
 import kai.domain.observations.Observations
+import kai.domain.result.getOrThrow
+import kai.domain.testcase.TestCase
 import kai.plugin.registry.PluginRegistry
 
 interface FindingVerifier {
@@ -12,7 +13,8 @@ interface FindingVerifier {
 }
 
 class OracleFindingVerifier(
-    private val registry: PluginRegistry
+    private val registry: PluginRegistry,
+    private val preparationService: TestCasePreparationService = TestCasePreparationService()
 ) : FindingVerifier {
     override fun reproduces(config: CampaignConfig, candidate: TestCase, original: PendingFinding): Boolean {
         return runCatching {
@@ -24,8 +26,9 @@ class OracleFindingVerifier(
 
     private fun execute(config: CampaignConfig, candidate: TestCase): Observations {
         val executor = registry.resolveExecutor(config.executorId.value)
-        val results = executor.execute(candidate, config.executionConfig)
-        return Observations.create(candidate.id, results)
+        val prepared = preparationService.prepare(candidate, executor).getOrThrow()
+        val results = executor.execute(prepared, config.executionConfig)
+        return Observations.create(prepared.id, results)
     }
 
     private fun sameFinding(

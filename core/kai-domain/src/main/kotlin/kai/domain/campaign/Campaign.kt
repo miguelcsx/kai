@@ -6,7 +6,8 @@ import kai.domain.id.ExecutorId
 import kai.domain.id.OracleId
 import kai.domain.id.ReducerId
 import kai.domain.id.StrategyId
-import kai.domain.testcase.CompilerProfile
+import kai.domain.id.TestCaseId
+import kai.domain.testcase.BuildConfig
 
 data class CampaignBudget(
     val maxIterations: Int,
@@ -33,9 +34,9 @@ data class CampaignConfig(
     val executorId: ExecutorId,
     val oracleIds: List<OracleId>,
     val reducerIds: List<ReducerId>,
-    val compilerProfiles: List<CompilerProfile>,
+    val buildConfig: BuildConfig,
     val budget: CampaignBudget,
-    val seedCorpusIds: List<String>,
+    val seedCorpusIds: List<TestCaseId>,
     val executionConfig: ExecutionConfig
 )
 

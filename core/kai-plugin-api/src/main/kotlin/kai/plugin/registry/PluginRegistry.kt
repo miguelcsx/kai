@@ -2,6 +2,7 @@ package kai.plugin.registry
 
 import kai.domain.campaign.CampaignConfig
 import kai.domain.id.InterfaceVersion
+import kai.domain.execution.ExecutorProbeResult
 import kai.plugin.executor.ExecutorPlugin
 import kai.plugin.oracle.OraclePlugin
 import kai.plugin.reducer.ReducerPlugin
@@ -105,6 +106,12 @@ class PluginRegistry(
             return
         }
         validateVersion("executor", config.executorId.value, plugin.version, errors)
+        when (val probe = plugin.probe()) {
+            is ExecutorProbeResult.Available -> Unit
+            is ExecutorProbeResult.Unavailable -> {
+                errors += "Executor plugin unavailable: ${config.executorId.value} (${probe.message})"
+            }
+        }
     }
 
     private fun validateOracles(

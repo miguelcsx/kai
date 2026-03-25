@@ -9,6 +9,7 @@ import kai.domain.id.ExecutorId
 import kai.domain.id.OracleId
 import kai.domain.id.ReducerId
 import kai.domain.id.StrategyId
+import kai.domain.id.TestCaseId
 import kai.domain.result.KaiResult
 import kai.domain.result.kaiResult
 import kai.domain.testcase.ApiVersion
@@ -33,6 +34,8 @@ class TomlCampaignConfigParser {
         val reducers = table(result, "campaign.reducers")
         val seeds = table(result, "campaign.seeds")
         val execution = table(result, "campaign.execution")
+        val profiles = profiles(result)
+        val build = result.getTable("campaign.build")
 
         CampaignConfig(
             id = CampaignId(string(campaign, "id")),
@@ -40,13 +43,13 @@ class TomlCampaignConfigParser {
             executorId = ExecutorId(string(executor, "id")),
             oracleIds = strings(oracles, "ids").map(::OracleId),
             reducerIds = strings(reducers, "ids").map(::ReducerId),
-            compilerProfiles = profiles(result),
+            buildConfig = buildConfig(build, profiles),
             budget = CampaignBudget.create(
                 maxIterations = long(budget, "max_iterations").toInt(),
                 maxFindings = long(budget, "max_findings").toInt(),
                 maxReductionIterations = long(budget, "max_reduction_iterations").toInt()
             ),
-            seedCorpusIds = strings(seeds, "corpus_ids"),
+            seedCorpusIds = strings(seeds, "corpus_ids").map(::TestCaseId),
             executionConfig = ExecutionConfig.create(
                 timeoutMillis = long(execution, "timeout_ms")
             )
@@ -72,7 +75,7 @@ class TomlCampaignConfigParser {
         }
     }
 
-    fun buildConfig(table: TomlTable, profiles: List<CompilerProfile>): kai.domain.testcase.BuildConfig {
+    fun buildConfig(table: TomlTable?, profiles: List<CompilerProfile>): kai.domain.testcase.BuildConfig {
         return kai.domain.testcase.BuildConfig.create(
             compilerProfiles = profiles,
             target = enum(table, "target", CompilationTarget.JVM),
@@ -98,12 +101,18 @@ class TomlCampaignConfigParser {
         return stringValues(array, key)
     }
 
-    private inline fun <reified T : Enum<T>> enum(table: TomlTable, key: String, fallback: T): T {
+    private inline fun <reified T : Enum<T>> enum(table: TomlTable?, key: String, fallback: T): T {
+        if (table == null) {
+            return fallback
+        }
         val value = table.getString(key) ?: return fallback
         return enumValueOf(value.uppercase())
     }
 
-    private fun <T> value(table: TomlTable, key: String, fallback: T, create: (String) -> T): T {
+    private fun <T> value(table: TomlTable?, key: String, fallback: T, create: (String) -> T): T {
+        if (table == null) {
+            return fallback
+        }
         return table.getString(key)?.let(create) ?: fallback
     }
 

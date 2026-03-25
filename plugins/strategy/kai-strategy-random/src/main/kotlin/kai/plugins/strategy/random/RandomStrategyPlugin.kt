@@ -4,7 +4,6 @@ import java.util.Random
 import kai.domain.id.InterfaceVersion
 import kai.domain.id.StrategyId
 import kai.domain.observations.Observations
-import kai.domain.testcase.BuildConfig
 import kai.domain.testcase.Provenance
 import kai.domain.testcase.SourceFile
 import kai.domain.testcase.TestCase
@@ -36,7 +35,7 @@ class RandomStrategyPlugin : StrategyPlugin {
         val body = template(random, context.iteration)
         return TestCase.create(
             sources = listOf(SourceFile.create("Main.kt", body)),
-            buildConfig = buildConfig(context),
+            buildConfig = context.buildConfig,
             provenance = provenance(context)
         )
     }
@@ -57,12 +56,6 @@ class RandomStrategyPlugin : StrategyPlugin {
             "    println(\"kai-$iteration=\" + helper$name())",
             "}"
         ).joinToString("\n")
-    }
-
-    private fun buildConfig(context: GenerationContext): BuildConfig {
-        return BuildConfig.create(
-            compilerProfiles = context.compilerProfiles
-        )
     }
 
     private fun provenance(context: GenerationContext): Provenance {

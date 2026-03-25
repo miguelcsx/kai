@@ -19,7 +19,7 @@ class MutationStrategyPlugin : StrategyPlugin {
         val base = context.corpusSample.firstOrNull() ?: return sequenceOf(seedCase(context))
         val mutant = mutate(
             base,
-            MutationContext(context.campaignId, context.seed, context.compilerProfiles, context.iteration + 1)
+            MutationContext(context.campaignId, context.seed, context.buildConfig, context.iteration + 1)
         )
         return sequenceOf(mutant)
     }
@@ -46,9 +46,7 @@ class MutationStrategyPlugin : StrategyPlugin {
     private fun seedCase(context: GenerationContext): TestCase {
         return TestCase.create(
             sources = listOf(SourceFile.create("Main.kt", "fun main() { println(\"seed\") }")),
-            buildConfig = kai.domain.testcase.BuildConfig.create(
-                compilerProfiles = context.compilerProfiles
-            ),
+            buildConfig = context.buildConfig,
             provenance = Provenance(
                 campaignId = context.campaignId,
                 strategyId = id,

@@ -1,5 +1,7 @@
 package kai.domain.execution
 
+import kai.domain.testcase.CompilationTarget
+
 data class ExecutionConfig(
     val timeoutMillis: Long,
     val environment: Map<String, String>,
@@ -23,6 +25,15 @@ data class ExecutorCapabilities(
     val supportsNative: Boolean,
     val supportsWasm: Boolean
 ) {
+    fun supports(target: CompilationTarget): Boolean {
+        return when (target) {
+            CompilationTarget.JVM -> supportsJvm
+            CompilationTarget.JS -> supportsJs
+            CompilationTarget.NATIVE -> supportsNative
+            CompilationTarget.WASM -> supportsWasm
+        }
+    }
+
     companion object {
         fun jvmOnly(): ExecutorCapabilities {
             return ExecutorCapabilities(true, false, false, false)

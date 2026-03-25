@@ -11,6 +11,8 @@ import kai.domain.id.ExecutorId
 import kai.domain.id.OracleId
 import kai.domain.id.ReducerId
 import kai.domain.id.StrategyId
+import kai.domain.id.TestCaseId
+import kai.domain.testcase.BuildConfig
 import kai.domain.testcase.ApiVersion
 import kai.domain.testcase.CompilationTarget
 import kai.domain.testcase.CompilerProfile
@@ -57,8 +59,8 @@ object CampaignCodec {
                 "executorId" to JsonValue.Str(config.executorId.value),
                 "oracleIds" to JsonValue.Arr(config.oracleIds.map { JsonValue.Str(it.value) }),
                 "reducerIds" to JsonValue.Arr(config.reducerIds.map { JsonValue.Str(it.value) }),
-                "compilerProfiles" to JsonValue.Arr(config.compilerProfiles.map { encodeProfile(it) }),
-                "seedCorpusIds" to JsonValue.Arr(config.seedCorpusIds.map { JsonValue.Str(it) }),
+                "buildConfig" to encodeBuildConfig(config.buildConfig),
+                "seedCorpusIds" to JsonValue.Arr(config.seedCorpusIds.map { JsonValue.Str(it.value) }),
                 "budget" to JsonValue.Obj(
                     linkedMapOf(
                         "maxIterations" to JsonValue.Num(config.budget.maxIterations.toLong()),
@@ -84,14 +86,35 @@ object CampaignCodec {
             executorId = ExecutorId(value.string("executorId")),
             oracleIds = value.array("oracleIds").map { OracleId(it.asString()) },
             reducerIds = value.array("reducerIds").map { ReducerId(it.asString()) },
-            compilerProfiles = value.array("compilerProfiles").map { decodeProfile(it) },
+            buildConfig = decodeBuildConfig(value.get("buildConfig")),
             budget = CampaignBudget.create(
                 maxIterations = budget.values.getValue("maxIterations").asLong().toInt(),
                 maxFindings = budget.values.getValue("maxFindings").asLong().toInt(),
                 maxReductionIterations = budget.values.getValue("maxReductionIterations").asLong().toInt()
             ),
-            seedCorpusIds = value.array("seedCorpusIds").map { it.asString() },
+            seedCorpusIds = value.array("seedCorpusIds").map { TestCaseId(it.asString()) },
             executionConfig = ExecutionConfig.create(execution.values.getValue("timeoutMillis").asLong())
+        )
+    }
+
+    private fun encodeBuildConfig(buildConfig: BuildConfig): JsonValue {
+        return JsonValue.Obj(
+            linkedMapOf(
+                "profiles" to JsonValue.Arr(buildConfig.compilerProfiles.map { encodeProfile(it) }),
+                "target" to JsonValue.Str(buildConfig.target.name),
+                "languageVersion" to JsonValue.Str(buildConfig.languageVersion.value),
+                "apiVersion" to JsonValue.Str(buildConfig.apiVersion.value)
+            )
+        )
+    }
+
+    private fun decodeBuildConfig(value: JsonValue): BuildConfig {
+        val node = value.asObject()
+        return BuildConfig.create(
+            compilerProfiles = node.values.getValue("profiles").asArray().map { decodeProfile(it) },
+            target = CompilationTarget.valueOf(node.values.getValue("target").asString()),
+            languageVersion = LanguageVersion(node.values.getValue("languageVersion").asString()),
+            apiVersion = ApiVersion(node.values.getValue("apiVersion").asString())
         )
     }
 

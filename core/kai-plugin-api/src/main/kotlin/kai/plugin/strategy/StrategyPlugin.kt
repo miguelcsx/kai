@@ -4,21 +4,21 @@ import kai.domain.id.CampaignId
 import kai.domain.id.InterfaceVersion
 import kai.domain.id.StrategyId
 import kai.domain.observations.Observations
-import kai.domain.testcase.CompilerProfile
+import kai.domain.testcase.BuildConfig
 import kai.domain.testcase.TestCase
 
 data class GenerationContext(
     val campaignId: CampaignId,
     val seed: Long,
     val iteration: Int,
-    val compilerProfiles: List<CompilerProfile>,
+    val buildConfig: BuildConfig,
     val corpusSample: List<TestCase>
 )
 
 data class MutationContext(
     val campaignId: CampaignId,
     val seed: Long,
-    val compilerProfiles: List<CompilerProfile>,
+    val buildConfig: BuildConfig,
     val iteration: Int
 )
 
